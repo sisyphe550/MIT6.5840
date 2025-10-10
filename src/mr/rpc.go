@@ -6,8 +6,10 @@ package mr
 // remember to capitalize all names.
 //
 
-import "os"
-import "strconv"
+import (
+	"os"
+	"strconv"
+)
 
 //
 // example to show how to declare the arguments
@@ -23,7 +25,38 @@ type ExampleReply struct {
 }
 
 // Add your RPC definitions here.
+type TaskType int
 
+const (
+	TaskNone TaskType = iota
+	TaskMap
+	TaskReduce
+	TaskWait
+	TaskExit
+)
+
+// Assign a file name to a map task that has not yet started
+type AssignTaskArgs struct{}
+
+type AssignTaskReply struct {
+	Type TaskType
+	// Map
+	FileName  string
+	MapTaskId int
+	NReduce   int
+	// Reduce
+	ReduceIdx int
+	NMap      int
+}
+
+type ReportTaskArgs struct {
+	Type      TaskType
+	MapTaskId int
+	ReduceIdx int
+	Success   bool
+}
+
+type ReportTaskReply struct{}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

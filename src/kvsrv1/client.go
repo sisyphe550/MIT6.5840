@@ -1,11 +1,12 @@
 package kvsrv
 
 import (
-	"6.5840/kvsrv1/rpc"
-	"6.5840/kvtest1"
-	"6.5840/tester1"
-)
+	"time"
 
+	"6.5840/kvsrv1/rpc"
+	kvtest "6.5840/kvtest1"
+	tester "6.5840/tester1"
+)
 
 type Clerk struct {
 	clnt   *tester.Clnt
@@ -30,7 +31,28 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
-	return "", 0, rpc.ErrNoKey
+	args := rpc.GetArgs{Key: key}
+	reply := rpc.GetReply{}
+	err := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+	for {
+		if !err {
+			// RPC failed, retry
+			time.Sleep(100 * time.Millisecond)
+			reply = rpc.GetReply{}
+			err = ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+			continue
+		}
+		switch reply.Err {
+		case rpc.OK:
+			return reply.Value, reply.Version, rpc.OK
+		case rpc.ErrNoKey:
+			return "", 0, rpc.ErrNoKey
+		default:
+			// transient or unexpected error; retry
+			reply = rpc.GetReply{}
+			err = ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+		}
+	}
 }
 
 // Put updates key with value only if the version in the
@@ -52,5 +74,33 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
-	return rpc.ErrNoKey
+	args := rpc.PutArgs{Key: key, Value: value, Version: version}
+	reply := rpc.PutReply{}
+	err := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+	for i := 0; ; i++ {
+		if !err {
+			// RPC failed, retry
+			time.Sleep(100 * time.Millisecond)
+			reply = rpc.PutReply{}
+			err = ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+			continue
+		}
+		switch reply.Err {
+		case rpc.OK:
+			return rpc.OK
+		case rpc.ErrVersion:
+			if i == 0 {
+				return rpc.ErrVersion
+			} else {
+				return rpc.ErrMaybe
+			}
+		case rpc.ErrNoKey:
+			// terminal for this lab: key missing when version>0 or exists when version==0
+			return rpc.ErrNoKey
+		default:
+			// transient or unexpected error; retry
+			reply = rpc.PutReply{}
+			err = ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+		}
+	}
 }

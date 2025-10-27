@@ -326,7 +326,7 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool, args *RequestAppen
 }
 
 func (rf *Raft) ticker() {
-	for rf.killed() == false {
+	for !rf.killed() {
 
 		// Your code here (3A)
 		// Check if a leader election should be started.

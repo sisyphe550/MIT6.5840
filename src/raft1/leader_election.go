@@ -45,7 +45,7 @@ func (rf *Raft) StartElection() {
 				return
 			}
 			rf.state = leader
-			go rf.StartAppendEntries(false)
+			go rf.StartAppendEntries(true)
 		}(i)
 	}
 }

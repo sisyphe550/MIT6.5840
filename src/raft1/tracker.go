@@ -11,6 +11,15 @@ type PeerTracker struct {
 	lastAck time.Time
 }
 
+func (rf *Raft) resetTrackedIndex() {
+	for i, _ := range rf.peerTrackers {
+		if i != rf.me {
+			rf.peerTrackers[i].nextIndex = rf.log.LastLogIndex + 1
+			rf.peerTrackers[i].matchIndex = 0
+		}
+	}
+}
+
 func (rf *Raft) quorumActive() bool {
 	activePeers := 1
 	for i, tracker := range rf.peerTrackers {

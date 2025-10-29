@@ -9,6 +9,7 @@ package raft
 import (
 	//	"bytes"
 
+	"bytes"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	//	"6.5840/labgob"
+	"6.5840/labgob"
 	"6.5840/labrpc"
 	"6.5840/raftapi"
 	tester "6.5840/tester1"
@@ -132,9 +134,19 @@ func (rf *Raft) persist() {
 	// e.Encode(rf.yyy)
 	// raftstate := w.Bytes()
 	// rf.persister.Save(raftstate, nil)
+
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+	raftstate := w.Bytes()
+	go rf.persister.Save(raftstate, nil)
 }
 
 // restore previously persisted state.
+// data := rf.persister.ReadRaftState()
+// readPersist(data)
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
@@ -152,6 +164,16 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	rf.votedFor = 0
+	if d.Decode(&rf.currentTerm) != nil ||
+		d.Decode(&rf.votedFor) != nil ||
+		d.Decode(&rf.log) != nil {
+		// error...
+		DPrintf(999, "%v: readPersist decode error\n", rf.SayMeL())
+		panic("")
+	}
 }
 
 // how many bytes in Raft's persisted log?
@@ -280,6 +302,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 	index = rf.log.LastLogIndex + 1
 	rf.log.appendL(Entry{term, command})
+	rf.persist()
 	go rf.StartAppendEntries(false)
 
 	return index, term, isLeader
@@ -436,6 +459,7 @@ func (rf *Raft) AppendEntries(targetServerId int, heart bool) {
 			rf.state = follower
 			rf.currentTerm = reply.FollowerTerm
 			rf.votedFor = None
+			rf.persist()
 			return
 		}
 
@@ -567,11 +591,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.votedFor = None
 	rf.state = follower
+	rf.resetElectionTimer()
 	rf.heartbeatTimeout = heartbeatTimeout
+	rf.log = NewLog()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
-	rf.log = NewLog()
 	rf.applyHelper = NewApplyHelper(applyCh, rf.lastApplied)
 	rf.commitIndex = 0
 	rf.lastApplied = 0

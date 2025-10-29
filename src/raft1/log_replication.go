@@ -91,6 +91,8 @@ func (rf *Raft) HandleAppendEntriesRPC(args *RequestAppendEntriesArgs, reply *Re
 		reply.FollowerTerm = rf.currentTerm
 	}
 
+	defer rf.persist()
+
 	if args.PrevLogIndex+1 < rf.log.FirstLogIndex || args.PrevLogIndex > rf.log.LastLogIndex {
 		// DPrintf(111, "args.PrevLogIndex is %d, out of index...", args.PrevLogIndex)
 		reply.FollowerTerm = rf.currentTerm

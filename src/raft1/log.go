@@ -50,12 +50,15 @@ func (log *Log) empty() bool {
 	return log.FirstLogIndex > log.LastLogIndex
 }
 
-func (log *Log) getEntryTerm(index int) int {
+func (rf *Raft) getEntryTerm(index int) int {
 	if index == 0 {
 		return 0
 	}
-	if log.FirstLogIndex <= log.LastLogIndex {
-		return log.getOneEntry(index).Term
+	if index == rf.log.FirstLogIndex-1 {
+		return rf.snopshotLastIncludeIndex
+	}
+	if rf.log.FirstLogIndex <= rf.log.LastLogIndex {
+		return rf.log.getOneEntry(index).Term
 	}
 	return -1
 }

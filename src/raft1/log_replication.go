@@ -93,13 +93,29 @@ func (rf *Raft) HandleAppendEntriesRPC(args *RequestAppendEntriesArgs, reply *Re
 
 	defer rf.persist()
 
+	if rf.log.empty() {
+		if args.PrevLogIndex == rf.snopshotLastIncludeIndex {
+			rf.log.appendL(args.Entries...)
+			reply.FollowerTerm = rf.currentTerm
+			reply.Success = true
+			reply.PrevLogIndex = rf.log.LastLogIndex
+			reply.PrevLogTerm = rf.getLastEntryTerm()
+			return
+		} else {
+			reply.FollowerTerm = rf.currentTerm
+			reply.Success = false
+			reply.PrevLogIndex = rf.log.LastLogIndex
+			reply.PrevLogTerm = rf.getLastEntryTerm()
+		}
+	}
+
 	if args.PrevLogIndex+1 < rf.log.FirstLogIndex || args.PrevLogIndex > rf.log.LastLogIndex {
 		// DPrintf(111, "args.PrevLogIndex is %d, out of index...", args.PrevLogIndex)
 		reply.FollowerTerm = rf.currentTerm
 		reply.Success = false
 		reply.PrevLogIndex = rf.log.LastLogIndex
 		reply.PrevLogTerm = rf.getLastEntryTerm()
-	} else if rf.log.getEntryTerm(args.PrevLogIndex) == args.PrevLogTerm {
+	} else if rf.getEntryTerm(args.PrevLogIndex) == args.PrevLogTerm {
 		ok := true
 		for i, entry := range args.Entries {
 			index := args.PrevLogIndex + 1 + i
@@ -129,7 +145,7 @@ func (rf *Raft) HandleAppendEntriesRPC(args *RequestAppendEntriesArgs, reply *Re
 		// DPrintf(200, "%v:log entries was overrited, added or done nothing, updating commitIndex to %d...", rf.SayMeL(), rf.commitIndex)
 	} else {
 		prevIndex := args.PrevLogIndex
-		for prevIndex >= rf.log.FirstLogIndex && rf.log.getEntryTerm(prevIndex) == rf.log.getOneEntry(args.PrevLogIndex).Term {
+		for prevIndex >= rf.log.FirstLogIndex && rf.getEntryTerm(prevIndex) == rf.log.getOneEntry(args.PrevLogIndex).Term {
 			prevIndex--
 		}
 		//prevIndex++ // 当前任期提交的第一个日志
@@ -137,8 +153,11 @@ func (rf *Raft) HandleAppendEntriesRPC(args *RequestAppendEntriesArgs, reply *Re
 		reply.Success = false
 		if prevIndex >= rf.log.FirstLogIndex {
 			reply.PrevLogIndex = prevIndex
-			reply.PrevLogTerm = rf.log.getEntryTerm(prevIndex)
+			reply.PrevLogTerm = rf.getEntryTerm(prevIndex)
 			// DPrintf(111, "%v: stepping over the index of currentTerm to the last log entry of last term", rf.SayMeL())
+		} else {
+			reply.PrevLogIndex = rf.snopshotLastIncludeIndex
+			reply.PrevLogTerm = rf.snopshotLastIncludeTerm
 		}
 	}
 
@@ -159,7 +178,7 @@ func (rf *Raft) tryCommitL(matchIndex int) {
 	}
 
 	// 提交的日志必须是当前任期内收到的日志
-	if rf.log.getEntryTerm(matchIndex) != rf.currentTerm {
+	if rf.getEntryTerm(matchIndex) != rf.currentTerm {
 		return
 	}
 

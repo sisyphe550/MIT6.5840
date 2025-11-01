@@ -28,7 +28,7 @@ func (rf *Raft) StartElection() {
 	args.LastLogTerm = rf.getLastEntryTerm()
 	defer rf.persist()
 
-	for i, _ := range rf.peers {
+	for i := range rf.peers {
 		if i == rf.me {
 			continue
 		}
@@ -48,10 +48,22 @@ func (rf *Raft) StartElection() {
 				return
 			}
 
+			if reply.Term > rf.currentTerm {
+				rf.votedFor = None
+				rf.state = follower
+				rf.currentTerm = reply.Term
+				return
+			}
+
 			votes++
 			if done || votes <= len(rf.peers)/2 {
 				return
 			}
+
+			if rf.state != candidate || rf.currentTerm != term {
+				return
+			}
+
 			rf.becomeLeader()
 			go rf.StartAppendEntries(true)
 		}(i)
@@ -111,6 +123,7 @@ func (rf *Raft) HandleHeartbeatRPC(args *RequestAppendEntriesArgs, reply *Reques
 		rf.currentTerm = args.LeaderTerm
 		reply.FollowerTerm = rf.currentTerm
 	}
+	rf.persist()
 }
 
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -131,6 +144,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.Term = rf.currentTerm
 		rf.votedFor = None
 		rf.state = follower
+		rf.persist()
 	}
 
 	update := false
@@ -144,5 +158,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.persist()
 	} else {
 		reply.VoteGranted = false
+		reply.Term = rf.currentTerm
 	}
 }
